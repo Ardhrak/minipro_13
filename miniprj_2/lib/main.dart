@@ -11,7 +11,7 @@ class ExamSeatingApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Exam Seatingg Arrangement',
+      title: 'Exam Seating Arrangement',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primaryColor: const Color(0xFFECDCAB),
