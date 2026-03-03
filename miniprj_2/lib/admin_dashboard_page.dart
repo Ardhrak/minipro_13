@@ -5,8 +5,6 @@ import 'admin_invigilator_allocation_page.dart';
 import 'admin_medical_requests_page.dart';
 import 'admin_notifications_page.dart';
 
-
-
 class AdminDashboardPage extends StatelessWidget {
   const AdminDashboardPage({Key? key}) : super(key: key);
 

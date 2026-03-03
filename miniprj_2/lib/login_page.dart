@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart'; // ✅ NEW: Import FontAwesome
 import 'admin_dashboard_page.dart';
-//import 'student_dashboard_page.dart';
+import 'student_dashboard_page.dart';
 //import 'invigilator_dashboard_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -34,9 +34,9 @@ class _LoginPageState extends State<LoginPage> {
         case 'admin':
           dashboard = const AdminDashboardPage();
           break;
-      //case 'student':
-      //  dashboard = const StudentDashboardPage();
-      //  break;
+      case 'student':
+        dashboard = const StudentDashboardPage();
+        break;
       //case 'invigilator':
       //  dashboard = const InvigilatorDashboardPage();
       //  break;
