@@ -58,6 +58,28 @@ class _AdminMedicalRequestsPageState extends State<AdminMedicalRequestsPage> {
     },
   ];
 
+  String _selectedFilter = 'All'; // Track selected filter
+  late List<Map<String, dynamic>> _filteredRequests;
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredRequests = List.from(_medicalRequests);
+  }
+
+  void _applyFilter(String filter) {
+    setState(() {
+      _selectedFilter = filter;
+      if (filter == 'All') {
+        _filteredRequests = List.from(_medicalRequests);
+      } else {
+        _filteredRequests = _medicalRequests
+            .where((request) => request['status'] == filter.toLowerCase())
+            .toList();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -89,22 +111,44 @@ class _AdminMedicalRequestsPageState extends State<AdminMedicalRequestsPage> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildFilterChip('All', true),
+                    _buildFilterChip('All', _selectedFilter == 'All'),
                     const SizedBox(width: 8),
-                    _buildFilterChip('Pending', false),
+                    _buildFilterChip('Pending', _selectedFilter == 'Pending'),
                     const SizedBox(width: 8),
-                    _buildFilterChip('Approved', false),
+                    _buildFilterChip('Approved', _selectedFilter == 'Approved'),
                     const SizedBox(width: 8),
-                    _buildFilterChip('Rejected', false),
+                    _buildFilterChip('Rejected', _selectedFilter == 'Rejected'),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
               Expanded(
-                child: ListView.builder(
-                  itemCount: _medicalRequests.length,
+                child: _filteredRequests.isEmpty
+                    ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      FaIcon(
+                        FontAwesomeIcons.folderOpen,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No ${_selectedFilter.toLowerCase()} requests found',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+                    : ListView.builder(
+                  itemCount: _filteredRequests.length,
                   itemBuilder: (context, index) {
-                    final request = _medicalRequests[index];
+                    final request = _filteredRequests[index];
                     final statusColor = _getStatusColor(request['status']);
                     final statusIcon = _getStatusIcon(request['status']);
 
@@ -350,7 +394,7 @@ class _AdminMedicalRequestsPageState extends State<AdminMedicalRequestsPage> {
       label: Text(label),
       selected: isSelected,
       onSelected: (bool selected) {
-        // Handle filter logic
+        _applyFilter(label);
       },
       backgroundColor: Colors.white,
       selectedColor: const Color(0xFFECDCAB),
@@ -528,6 +572,8 @@ class _AdminMedicalRequestsPageState extends State<AdminMedicalRequestsPage> {
               Navigator.pop(context);
               setState(() {
                 request['status'] = 'approved';
+                // Refresh the filtered list based on current filter
+                _applyFilter(_selectedFilter);
               });
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -583,6 +629,8 @@ class _AdminMedicalRequestsPageState extends State<AdminMedicalRequestsPage> {
               setState(() {
                 request['status'] = 'rejected';
                 request['rejectionReason'] = reasonController.text;
+                // Refresh the filtered list based on current filter
+                _applyFilter(_selectedFilter);
               });
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
