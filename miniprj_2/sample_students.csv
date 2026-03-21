@@ -1,0 +1,22 @@
+RegisterNumber,Name,Department,Email,Phone,SubjectCode,ExamDate
+23B001,John Doe,CSE,pkd23cs001@gecskp.ac.in,9876543210,CS301,2026-03-15
+23B002,Jane Smith,ECE,pkd23ec001@gecskp.ac.in,9876543211,CS301,2026-03-15
+23B003,Bob Johnson,MECH,pkd23me001@gecskp.ac.in,9876543212,PH201,2026-03-15
+23B004,Alice Williams,CSE,pkd23cs002@gecskp.ac.in,9876543213,CS301,2026-03-15
+23B005,Charlie Brown,ECE,pkd23ec002@gecskp.ac.in,9876543214,PH201,2026-03-15
+23B006,Diana Prince,CSE,pkd23cs003@gecskp.ac.in,9876543215,CS301,2026-03-15
+23B007,Ethan Hunt,MECH,pkd23me002@gecskp.ac.in,9876543216,ME101,2026-03-15
+23B008,Fiona Gallagher,ECE,pkd23ec003@gecskp.ac.in,9876543217,PH201,2026-03-15
+23B009,George Wilson,CSE,pkd23cs004@gecskp.ac.in,9876543218,CS301,2026-03-15
+23B010,Hannah Baker,CIVIL,pkd23cv001@gecskp.ac.in,9876543219,CE101,2026-03-15
+23B011,Ian Malcolm,CSE,pkd23cs005@gecskp.ac.in,9876543220,CS301,2026-03-15
+23B012,Julia Roberts,ECE,pkd23ec004@gecskp.ac.in,9876543221,PH201,2026-03-15
+23B013,Kevin Hart,MECH,pkd23me003@gecskp.ac.in,9876543222,ME101,2026-03-15
+23B014,Laura Palmer,CSE,pkd23cs006@gecskp.ac.in,9876543223,CS301,2026-03-15
+23B015,Michael Scott,ECE,pkd23ec005@gecskp.ac.in,9876543224,PH201,2026-03-15
+23B016,Nancy Wheeler,CIVIL,pkd23cv002@gecskp.ac.in,9876543225,CE101,2026-03-15
+23B017,Oscar Martinez,CSE,pkd23cs007@gecskp.ac.in,9876543226,CS301,2026-03-15
+23B018,Pam Beesly,MECH,pkd23me004@gecskp.ac.in,9876543227,ME101,2026-03-15
+23B019,Quinn Fabray,ECE,pkd23ec006@gecskp.ac.in,9876543228,PH201,2026-03-15
+23B020,Ryan Howard,CSE,pkd23cs008@gecskp.ac.in,9876543229,CS301,2026-03-15
+

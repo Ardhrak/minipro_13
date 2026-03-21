@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class StudentSeatAllocationPage extends StatefulWidget {
-  const StudentSeatAllocationPage({Key? key}) : super(key: key);
+  const StudentSeatAllocationPage({super.key});
 
   @override
   State<StudentSeatAllocationPage> createState() =>
@@ -11,49 +13,142 @@ class StudentSeatAllocationPage extends StatefulWidget {
 
 class _StudentSeatAllocationPageState
     extends State<StudentSeatAllocationPage> {
-  // Mock data — in production, fetch from backend
-  final List<Map<String, dynamic>> _examSeats = [
-    {
-      'subject': 'Data Structures & Algorithms',
-      'subjectCode': 'CS301',
-      'date': '15 Mar 2026',
-      'time': '09:00 AM – 12:00 PM',
-      'hall': 'Hall A – Block 1',
-      'seat': '47',
-      'row': 'D',
-      'column': '7',
-      'building': 'Academic Block North',
-    },
-    {
-      'subject': 'Computer Networks',
-      'subjectCode': 'CS304',
-      'date': '18 Mar 2026',
-      'time': '02:00 PM – 05:00 PM',
-      'hall': 'Hall B – Block 2',
-      'seat': '23',
-      'row': 'B',
-      'column': '3',
-      'building': 'Academic Block South',
-    },
-    {
-      'subject': 'Operating Systems',
-      'subjectCode': 'CS302',
-      'date': '20 Mar 2026',
-      'time': '09:00 AM – 12:00 PM',
-      'hall': 'Hall A – Block 1',
-      'seat': '11',
-      'row': 'A',
-      'column': '11',
-      'building': 'Academic Block North',
-    },
-  ];
+  final _auth = FirebaseAuth.instance;
+  final _db = FirebaseFirestore.instance;
 
+  List<Map<String, dynamic>> _examSeats = [];
+  bool _isLoading = true;
+  String? _error;
   int _selectedIndex = 0;
 
   @override
-  Widget build(BuildContext context) {
-    final selected = _examSeats[_selectedIndex];
+  void initState() {
+    super.initState();
+    _loadSeatAllocations();
+  }
 
+  Future<void> _loadSeatAllocations() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        setState(() {
+          _error = 'Not logged in';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Get student's register number from users collection
+      final userDoc = await _db.collection('users').doc(user.uid).get();
+      if (!userDoc.exists) {
+        setState(() {
+          _error = 'User data not found';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final registerNumber = userDoc.data()!['registerNumber'];
+
+      // Get seat allocations from student's seatAllocations subcollection
+      final seatAllocationsQuery = await _db
+          .collection('students')
+          .doc(registerNumber)
+          .collection('seatAllocations')
+          .orderBy('examDate', descending: false)
+          .get();
+
+      if (seatAllocationsQuery.docs.isEmpty) {
+        setState(() {
+          _examSeats = [];
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Process seat allocations
+      List<Map<String, dynamic>> seats = [];
+
+      for (var doc in seatAllocationsQuery.docs) {
+        final data = doc.data();
+
+        // Get exam details to show subject name
+        final examDate = data['examDate'];
+        final examsQuery = await _db
+            .collection('exams')
+            .where('examDate', isEqualTo: examDate)
+            .limit(1)
+            .get();
+
+        String subjectName = 'Exam';
+        String subjectCode = 'N/A';
+        String time = '09:00 AM';
+
+        if (examsQuery.docs.isNotEmpty) {
+          final examData = examsQuery.docs.first.data();
+          subjectName = examData['subjectName'] ?? examData['subjectCode'] ?? 'Exam';
+          subjectCode = examData['subjectCode'] ?? 'N/A';
+          time = examData['time'] ?? '09:00 AM';
+        }
+
+        seats.add({
+          'subject': subjectName,
+          'subjectCode': subjectCode,
+          'date': _formatDate(examDate),
+          'time': time,
+          'hall': data['hallName'] ?? 'Not allocated',
+          'seat': data['seatCode'] ?? 'Not allocated',
+          'building': data['block'] ?? 'TBA',
+          'row': data['row']?.toString() ?? '-',
+          'column': data['column']?.toString() ?? '-',
+          'seatNumber': data['seatNumber']?.toString() ?? '-',
+        });
+      }
+
+      setState(() {
+        _examSeats = seats;
+        _isLoading = false;
+      });
+
+    } catch (e) {
+      setState(() {
+        _error = 'Error loading seat allocations: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatDate(dynamic date) {
+    if (date == null) return 'TBA';
+    try {
+      if (date is Timestamp) {
+        final dt = date.toDate();
+        return '${dt.day} ${_getMonth(dt.month)} ${dt.year}';
+      }
+      // Handle string dates like "2026-03-15"
+      if (date is String) {
+        final parts = date.split('-');
+        if (parts.length == 3) {
+          final year = parts[0];
+          final month = int.parse(parts[1]);
+          final day = parts[2];
+          return '$day ${_getMonth(month)} $year';
+        }
+      }
+      return date.toString();
+    } catch (e) {
+      return 'TBA';
+    }
+  }
+
+  String _getMonth(int month) {
+    const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[month];
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('SEAT ALLOCATION'),
@@ -63,52 +158,89 @@ class _StudentSeatAllocationPageState
         ),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Your Seat Allocations',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Select an exam to view seat details',
-                style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-              ),
-              const SizedBox(height: 20),
-
-              // ─── Exam Selector ───────────────────────────────────────────
-              // ✅ FIX: Use intrinsic height via shrinkWrap row instead of a
-              //         fixed SizedBox height that clips content on some devices.
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: List.generate(_examSeats.length, (index) {
-                    final exam = _examSeats[index];
-                    final isSelected = index == _selectedIndex;
-                    return Padding(
-                      padding: EdgeInsets.only(
-                          right: index < _examSeats.length - 1 ? 12 : 0),
-                      child: GestureDetector(
-                        onTap: () => setState(() => _selectedIndex = index),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: 150,
-                          // ✅ FIX: No fixed height — let content define height
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 14),
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.black87 : Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isSelected
-                                  ? Colors.black87
-                                  : const Color(0xFFECDCAB),
-                              width: 2,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                        const SizedBox(height: 16),
+                        Text(_error!, textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _loadSeatAllocations,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
+                : _examSeats.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.event_seat, size: 64, color: Colors.grey),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'No seat allocations yet',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                             ),
-                            boxShadow: [
+                            const SizedBox(height: 8),
+                            Text(
+                              'Seats will be allocated before the exam',
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      )
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Builder(
+                          builder: (context) {
+                            final selected = _examSeats[_selectedIndex];
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                            const Text(
+                              'Your Seat Allocations',
+                              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Select an exam to view seat details',
+                              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                            ),
+                            const SizedBox(height: 20),
+
+                            // ─── Exam Selector ───────────────────────────────────────────
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: List.generate(_examSeats.length, (index) {
+                                  final exam = _examSeats[index];
+                                  final isSelected = index == _selectedIndex;
+                                  return Padding(
+                                    padding: EdgeInsets.only(
+                                        right: index < _examSeats.length - 1 ? 12 : 0),
+                                    child: GestureDetector(
+                                      onTap: () => setState(() => _selectedIndex = index),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 200),
+                                        width: 150,
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 14, vertical: 14),
+                                        decoration: BoxDecoration(
+                                          color: isSelected ? Colors.black87 : Colors.white,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? Colors.black87
+                                                : const Color(0xFFECDCAB),
+                                            width: 2,
+                                          ),
+                                          boxShadow: [
                               if (isSelected)
                                 BoxShadow(
                                   color: Colors.black.withOpacity(0.15),
@@ -312,15 +444,16 @@ class _StudentSeatAllocationPageState
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
             ],
-          ),
-        ),
+          );
+        },
       ),
-    );
-  }
+    ),
+  ),
+);
+}
 
-  Widget _buildDetailRow(IconData icon, String label, String value) {
+Widget _buildDetailRow(IconData icon, String label, String value) {
     return Row(
       children: [
         Container(

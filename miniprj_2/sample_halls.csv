@@ -1,0 +1,7 @@
+HallCode,HallName,Block,Capacity,Rows,Columns
+H1,Main Hall A,Block 1,120,10,12
+H2,Main Hall B,Block 2,150,10,15
+H3,Seminar Hall,Block 1,100,10,10
+H4,Lab Hall,Block 3,80,8,10
+H5,Conference Hall,Block 2,60,6,10
+

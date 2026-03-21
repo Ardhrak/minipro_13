@@ -1,8 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart';
 import 'role_selection_page.dart';
 
-void main() {
-  runApp(const ExamSeatingApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
+    // Enable Firestore offline persistence for faster loading
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+
+    print("✅ Firebase Successfully Connected!");
+    runApp(const ExamSeatingApp());
+  } catch (e) {
+    print("❌ Firebase Connection Failed: $e");
+    runApp(const ErrorApp());
+  }
 }
 
 class ExamSeatingApp extends StatelessWidget {
@@ -83,6 +104,41 @@ class ExamSeatingApp extends StatelessWidget {
         ),
       ),
       home: const RoleSelectionPage(),
+    );
+  }
+}
+
+class ErrorApp extends StatelessWidget {
+  const ErrorApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        backgroundColor: Colors.red[50],
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Colors.red[700]),
+              const SizedBox(height: 16),
+              Text(
+                '❌ Firebase Connection Failed',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red[700],
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Please check your Firebase configuration',
+                style: TextStyle(fontSize: 16, color: Colors.black54),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

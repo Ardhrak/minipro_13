@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart'; // ✅ NEW: Import FontAwesome
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'service/auth_service.dart';
 import 'admin_dashboard_page.dart';
 import 'student_dashboard_page.dart';
 import 'invigilator_dashboard_page.dart';
+import 'student_registration_page.dart';
 
 class LoginPage extends StatefulWidget {
   final String role;
@@ -18,6 +20,7 @@ class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -26,30 +29,54 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  void _handleLogin() {
-    if (_formKey.currentState!.validate()) {
-      // Navigate based on role
-      Widget dashboard;
-      switch (widget.role) {
-        case 'admin':
-          dashboard = const AdminDashboardPage();
-          break;
-      case 'student':
-        dashboard = const StudentDashboardPage();
-        break;
-      case 'invigilator':
-        dashboard = const InvigilatorDashboardPage();
-        break;
-        default:
-          return;
-      }
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => dashboard),
+
+  void _handleLogin() async {
+    if (_formKey.currentState!.validate()) {
+      setState(() => _isLoading = true);
+
+      final result = await AuthService().login(
+        _emailController.text.trim(),
+        _passwordController.text,
       );
+
+      setState(() => _isLoading = false);
+
+      if (result['success'] == true) {
+        if (result['role'] != widget.role) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Access denied for this role')),
+          );
+          return;
+        }
+
+        Widget dashboard;
+        switch (result['role']) {
+          case 'admin':
+            dashboard = const AdminDashboardPage();
+            break;
+          case 'student':
+            dashboard = const StudentDashboardPage();
+            break;
+          case 'invigilator':
+            dashboard = const InvigilatorDashboardPage();
+            break;
+          default:
+            return;
+        }
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => dashboard),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['error'] ?? 'Login failed')),
+        );
+      }
     }
   }
+
 
   // ✅ CHANGED: Return type to IconData to support FontAwesome
   IconData _getRoleIcon() {
@@ -170,17 +197,57 @@ class _LoginPageState extends State<LoginPage> {
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
-                              onPressed: _handleLogin,
+                              onPressed: _isLoading ? null : _handleLogin,
                               child: const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 4),
                                 child: Text('LOGIN'),
                               ),
                             ),
                           ),
+                          if (_isLoading) ...[
+                            const SizedBox(height: 16),
+                            const CircularProgressIndicator(),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Logging in...',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
                         ],
                       ),
                     ),
                   ),
+                  // ✅ NEW: Register button for students
+                  if (widget.role == 'student') ...[
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          "Don't have an account? ",
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const StudentRegistrationPage(),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            'Register here',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFECDCAB),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

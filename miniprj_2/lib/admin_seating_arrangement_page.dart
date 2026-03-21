@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:csv/csv.dart';
+import 'service/seating_service.dart';
+import 'universal_file_stub.dart'
+    if (dart.library.io) 'universal_file_io.dart';
 
 class AdminSeatingArrangementPage extends StatefulWidget {
   const AdminSeatingArrangementPage({Key? key}) : super(key: key);
@@ -435,41 +441,64 @@ class _AdminSeatingArrangementPageState
     );
   }
 
-  // ✅ Simulated File Upload Handler (NO file_picker package needed)
+  // ✅ REAL File Upload Handler with CSV parsing
   Future<void> _handleFileUpload(String category) async {
-    // Show file selection dialog (simulated)
-    final fileName = await _showFileSelectionDialog(category);
+    try {
+      // Pick CSV file
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv', 'xlsx', 'xls'],
+        withData: true, // Important for web platform
+      );
 
-    if (fileName != null) {
+      if (result == null) return;
+
+      final fileName = result.files.single.name;
+
       // Show processing dialog
+      if (!mounted) return;
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
-          child: Card(
-            child: Padding(
-              padding: EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Processing file...'),
-                ],
+        builder: (context) => const AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Processing file...'),
+              SizedBox(height: 8),
+              Text(
+                'Reading and uploading data to Firestore',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
-            ),
+            ],
           ),
         ),
       );
 
-      // Simulate processing delay
-      await Future.delayed(const Duration(seconds: 2));
+      // Read file content - works on both web and desktop
+      final csvString = await UniversalFile.readAsString(
+        result.files.single.path,
+        result.files.single.bytes,
+      );
+
+      // Parse CSV
+      final csvData = const CsvToListConverter().convert(csvString);
+
+      if (csvData.isEmpty || csvData.length < 2) {
+        throw Exception('CSV file is empty or invalid');
+      }
+
+      // Upload to Firestore based on category
+      await _uploadToFirestore(category, csvData);
 
       setState(() {
         _uploadStatus[category] = true;
         _uploadedFiles[category] = fileName;
       });
 
+      if (!mounted) return;
       Navigator.pop(context); // Close loading dialog
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -488,93 +517,128 @@ class _AdminSeatingArrangementPageState
           backgroundColor: Colors.green,
         ),
       );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const FaIcon(
+                FontAwesomeIcons.circleExclamation,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text('Error: $e')),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
     }
   }
 
-  // ✅ Simulated File Selection Dialog
-  Future<String?> _showFileSelectionDialog(String category) async {
-    final TextEditingController fileNameController = TextEditingController();
+  // ✅ Upload parsed CSV data to Firestore
+  Future<void> _uploadToFirestore(String category, List<List<dynamic>> csvData) async {
+    final firestore = FirebaseFirestore.instance;
+    WriteBatch batch = firestore.batch();
+    int count = 0;
 
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const FaIcon(FontAwesomeIcons.fileExcel, size: 20, color: Colors.green),
-            const SizedBox(width: 12),
-            const Text('Select Excel File'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Enter file name for ${_getCategoryName(category)}:',
-              style: const TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: fileNameController,
-              decoration: InputDecoration(
-                labelText: 'File Name',
-                hintText: 'e.g., ${category}_data.xlsx',
-                suffixText: '.xlsx',
-                prefixIcon: const FaIcon(FontAwesomeIcons.file, size: 20),
-              ),
-              autofocus: true,
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  const FaIcon(
-                    FontAwesomeIcons.circleInfo,
-                    size: 16,
-                    color: Colors.blue,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Accepted formats: .xlsx, .xls, .csv',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blue[900],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              if (fileNameController.text.trim().isNotEmpty) {
-                Navigator.pop(context, '${fileNameController.text.trim()}.xlsx');
-              }
-            },
-            icon: const FaIcon(FontAwesomeIcons.check, size: 16),
-            label: const Text('SELECT'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
+    switch (category) {
+      case 'students':
+        // CSV Format: RegisterNumber, Name, Department, Email, Phone, SubjectCode, ExamDate
+        for (int i = 1; i < csvData.length; i++) {
+          final row = csvData[i];
+          if (row.length < 7) continue;
+
+          final regNo = row[0].toString().trim();
+          final subjectCode = row[5].toString().trim();
+          final examDate = row[6].toString().trim();
+
+          // Add student to students collection
+          final studentRef = firestore.collection('students').doc(regNo);
+          batch.set(studentRef, {
+            'registerNumber': regNo,
+            'name': row[1].toString().trim(),
+            'department': row[2].toString().trim(),
+            'email': row[3].toString().trim(),
+            'phone': row[4].toString().trim(),
+            'uploadedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+
+          // Add exam if not exists
+          final examRef = firestore.collection('exams').doc(subjectCode);
+          batch.set(examRef, {
+            'subjectCode': subjectCode,
+            'examDate': examDate,
+            'uploadedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+
+          // Add student registration for this exam
+          final regRef = examRef.collection('registrations').doc();
+          batch.set(regRef, {
+            'registerNumber': regNo,
+            'examDate': examDate,
+            'registeredAt': FieldValue.serverTimestamp(),
+          });
+
+          count++;
+          if (count % 500 == 0) {
+            await batch.commit();
+            batch = firestore.batch();
+          }
+        }
+        break;
+
+      case 'halls':
+        // CSV Format: HallCode, HallName, Block, Capacity, Rows, Columns
+        for (int i = 1; i < csvData.length; i++) {
+          final row = csvData[i];
+          if (row.length < 6) continue;
+
+          final hallCode = row[0].toString().trim();
+          final hallRef = firestore.collection('halls').doc(hallCode);
+
+          batch.set(hallRef, {
+            'hallCode': hallCode,
+            'hallName': row[1].toString().trim(),
+            'block': row[2].toString().trim(),
+            'capacity': int.parse(row[3].toString()),
+            'rows': int.parse(row[4].toString()),
+            'columns': int.parse(row[5].toString()),
+            'uploadedAt': FieldValue.serverTimestamp(),
+          });
+
+          count++;
+        }
+        break;
+
+      case 'invigilators':
+        // CSV Format: EmployeeId, Name, Department, Email
+        for (int i = 1; i < csvData.length; i++) {
+          final row = csvData[i];
+          if (row.length < 4) continue;
+
+          final empId = row[0].toString().trim();
+          final invRef = firestore.collection('invigilators').doc(empId);
+
+          batch.set(invRef, {
+            'employeeId': empId,
+            'name': row[1].toString().trim(),
+            'department': row[2].toString().trim(),
+            'email': row[3].toString().trim(),
+            'uploadedAt': FieldValue.serverTimestamp(),
+          });
+
+          count++;
+        }
+        break;
+    }
+
+    await batch.commit();
   }
 
   String _getCategoryName(String category) {
@@ -590,46 +654,190 @@ class _AdminSeatingArrangementPageState
     }
   }
 
-  void _generateArrangement() {
+  Future<void> _generateArrangement() async {
+    // Show date picker to select exam date
+    final DateTime? selectedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      helpText: 'Select Exam Date',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFFECDCAB),
+              onPrimary: Colors.black87,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (selectedDate == null) return;
+
+    // Format date for Firestore
+    final examDate = '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
+
+    // Show loading dialog
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: const [
-              FaIcon(FontAwesomeIcons.wandMagicSparkles, size: 20),
-            SizedBox(width: 12),
-            Text('Generate Arrangement'),
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Generating seating arrangement...'),
+            SizedBox(height: 8),
+            Text(
+              'This may take a few moments',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
           ],
         ),
-        content: const Text(
-          'This will automatically generate seating arrangements based on the uploaded data. Do you want to proceed?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Switch to hall list tab
-              _tabController.animateTo(1);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Seating arrangement generated successfully!'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('GENERATE'),
-          ),
-        ],
       ),
     );
+
+    try {
+      // Call the seating service
+      final seatingService = SeatingService();
+      await seatingService.generateSeatingPlan(examDate);
+
+      // Get the generated plan details
+      final planDoc = await FirebaseFirestore.instance
+          .collection('seatingPlans')
+          .doc(examDate)
+          .get();
+
+      if (!mounted) return;
+
+      // Close loading dialog
+      Navigator.pop(context);
+
+      // Show success dialog with details
+      final totalHalls = planDoc.data()?['totalHalls'] ?? 0;
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green, size: 32),
+              SizedBox(width: 12),
+              Text('Success!'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Seating arrangement generated successfully!',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              Text('📅 Exam Date: $examDate'),
+              Text('🏛️ Halls Used: $totalHalls'),
+              const SizedBox(height: 16),
+              const Text(
+                'Students can now view their seat allocations.',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CLOSE'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _tabController.animateTo(1); // Switch to Hall List tab
+              },
+              child: const Text('VIEW HALLS'),
+            ),
+          ],
+        ),
+      );
+
+    } catch (e) {
+      if (!mounted) return;
+
+      // Close loading dialog
+      Navigator.pop(context);
+
+      final seatingError = e is SeatingGenerationException ? e : null;
+      final isMissingIndex = seatingError?.isMissingIndex ?? false;
+
+      // Show error dialog
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.error, color: Colors.red, size: 32),
+              SizedBox(width: 12),
+              Text('Error'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Failed to generate seating arrangement:'),
+              const SizedBox(height: 8),
+              Text(
+                seatingError?.message ?? e.toString(),
+                style: const TextStyle(color: Colors.red, fontSize: 12),
+              ),
+              if (isMissingIndex) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Action needed:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const Text('1) Create the required index in Firebase Console'),
+                const Text('2) Wait for index status to become Enabled'),
+                const Text('3) Tap RETRY'),
+                if ((seatingError?.indexUrl ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    seatingError!.indexUrl!,
+                    style: const TextStyle(fontSize: 11, color: Colors.blueGrey),
+                  ),
+                ],
+              ] else ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'Please ensure:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const Text('• Students are registered for exams'),
+                const Text('• Exam details are in Firestore'),
+                const Text('• Hall information is available'),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CLOSE'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _generateArrangement(); // Retry
+              },
+              child: const Text('RETRY'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   // Original Hall List Tab
@@ -911,3 +1119,4 @@ class _AdminSeatingArrangementPageState
     );
   }
 }
+
