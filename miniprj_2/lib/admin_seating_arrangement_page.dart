@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
 import 'service/seating_service.dart';
+import 'service/pdf_seating_service.dart';
 import 'universal_file_stub.dart'
     if (dart.library.io) 'universal_file_io.dart';
 
@@ -753,6 +754,14 @@ class _AdminSeatingArrangementPageState
               onPressed: () => Navigator.pop(context),
               child: const Text('CLOSE'),
             ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                Navigator.pop(context);
+                await _generateAndDownloadPdf(examDate);
+              },
+              icon: const FaIcon(FontAwesomeIcons.filePdf, size: 16),
+              label: const Text('GENERATE PDF'),
+            ),
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
@@ -990,6 +999,16 @@ class _AdminSeatingArrangementPageState
                                 ),
                                 label: const Text('Edit'),
                               ),
+                              const SizedBox(width: 8),
+                              TextButton.icon(
+                                onPressed: () => _generateAndDownloadPdf(hall['examDate']),
+                                icon: const FaIcon(
+                                  FontAwesomeIcons.filePdf,
+                                  size: 16,
+                                  color: Colors.red,
+                                ),
+                                label: const Text('PDF'),
+                              ),
                             ],
                           ),
                         ],
@@ -1118,5 +1137,142 @@ class _AdminSeatingArrangementPageState
       SnackBar(content: Text('Editing ${hall['name']}...')),
     );
   }
+
+  /// Generate and download PDF of seating arrangement
+  Future<void> _generateAndDownloadPdf(String examDate) async {
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Generating PDF...\n\nThis may take a few seconds'),
+              SizedBox(height: 8),
+              Text('Please wait...', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+          ),
+        ),
+      );
+
+      // Generate PDF with improved error handling
+      final pdfService = PdfSeatingService();
+      try {
+        await pdfService.generateSeatingPdf(examDate);
+      } catch (pdfError) {
+        print('PDF Generation Error: $pdfError');
+        rethrow;
+      }
+
+      if (!mounted) return;
+
+      // Close loading dialog
+      Navigator.pop(context);
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ PDF generated successfully!\n\nCheck your device notifications for the print/share dialog.'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      // Close loading dialog
+      try {
+        Navigator.pop(context);
+      } catch (e) {
+        // Dialog might not be open
+      }
+
+      // Show detailed error message
+      final errorMessage = _formatPdfError(e.toString());
+      
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.red, size: 28),
+              SizedBox(width: 12),
+              Text('PDF Generation Error'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(errorMessage, style: const TextStyle(fontSize: 13)),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  ),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Troubleshooting Tips:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                      SizedBox(height: 8),
+                      Text('• Ensure seating arrangement has been generated', style: TextStyle(fontSize: 11)),
+                      SizedBox(height: 4),
+                      Text('• Check internet connection', style: TextStyle(fontSize: 11)),
+                      SizedBox(height: 4),
+                      Text('• Try again in a few moments', style: TextStyle(fontSize: 11)),
+                      SizedBox(height: 4),
+                      Text('• Check Firebase Firestore has seating data', style: TextStyle(fontSize: 11)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CLOSE'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _generateAndDownloadPdf(examDate); // Retry
+              },
+              child: const Text('RETRY'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  /// Format PDF error message for display
+  String _formatPdfError(String errorMessage) {
+    if (errorMessage.contains('Seating plan not found')) {
+      return '❌ No seating plan found for this date.\n\nPlease generate the seating arrangement first.';
+    } else if (errorMessage.contains('No halls found')) {
+      return '❌ No hall data found in seating plan.\n\nPlease ensure halls are configured before generating seating.';
+    } else if (errorMessage.contains('layoutPdf')) {
+      return '❌ PDF viewer error.\n\nYour device might not have a PDF viewer configured.\n\nTry installing Adobe Reader or another PDF viewer.';
+    } else if (errorMessage.contains('permission')) {
+      return '❌ Permission denied.\n\nPlease grant storage permissions in app settings.';
+    } else if (errorMessage.contains('network')) {
+      return '❌ Network error.\n\nPlease check your internet connection.';
+    } else {
+      return '❌ Error: ${errorMessage.length > 100 ? errorMessage.substring(0, 100) + '...' : errorMessage}';
+    }
+  }
+
 }
 
